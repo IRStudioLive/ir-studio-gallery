@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import fs from "node:fs"
 import path from "node:path"
 import { getPhotos, savePhotos, upsertEvent } from "@/lib/irstudiolive/store"
+import { buildMediaProxyUrl, buildR2MediaKey, putR2Object, r2Enabled } from "@/lib/irstudiolive/r2"
 
 export const runtime = "nodejs"
 
@@ -65,7 +66,7 @@ function makeRecord(params: {
   }
 }
 
-function saveIncomingFile(params: {
+function saveIncomingFileLocally(params: {
   eventId: string
   kind: "image" | "video"
   filename: string
@@ -108,6 +109,52 @@ function saveIncomingFile(params: {
   return record
 }
 
+async function saveIncomingFile(params: {
+  eventId: string
+  kind: "image" | "video"
+  filename: string
+  bytes: Buffer
+  mimeType: string | null
+}) {
+  const originalName = sanitizePart(params.filename || `upload_${Date.now()}`)
+  const ext = extFromName(originalName) || extFromMime(params.mimeType || "", params.kind)
+  const stamp = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  const base = sanitizePart(path.basename(originalName, path.extname(originalName))) || `upload_${stamp}`
+  const savedName = `${stamp}_${base}${ext}`
+
+  if (!r2Enabled()) {
+    return saveIncomingFileLocally({
+      ...params,
+      filename: savedName,
+    })
+  }
+
+  const key = buildR2MediaKey({
+    eventId: sanitizePart(params.eventId),
+    kind: params.kind,
+    filename: savedName,
+  })
+
+  await putR2Object({
+    key,
+    body: params.bytes,
+    contentType: params.mimeType,
+  })
+
+  const publicBase = buildMediaProxyUrl(key)
+  const photos = getPhotos()
+  const record = makeRecord({
+    eventId: params.eventId,
+    base,
+    publicBase,
+    kind: params.kind,
+    mimeType: params.mimeType,
+  })
+  photos.unshift(record)
+  savePhotos(photos)
+  return record
+}
+
 export async function POST(req: NextRequest) {
   try {
     const contentType = (req.headers.get("content-type") || "").toLowerCase()
@@ -137,7 +184,7 @@ export async function POST(req: NextRequest) {
 
       upsertEvent({ id: eventId })
 
-      const record = saveIncomingFile({
+      const record = await saveIncomingFile({
         eventId,
         kind,
         filename: file.name || `upload_${Date.now()}`,
@@ -170,7 +217,7 @@ export async function POST(req: NextRequest) {
 
     upsertEvent({ id: eventId })
 
-    const record = saveIncomingFile({
+    const record = await saveIncomingFile({
       eventId,
       kind,
       filename: `raw_upload_${Date.now()}${extFromMime(contentType, kind)}`,
