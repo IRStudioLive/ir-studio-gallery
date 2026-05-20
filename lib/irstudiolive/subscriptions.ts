@@ -151,6 +151,12 @@ export function calculatePlatformFee(total: number, planId: IRSubscriptionPlanId
   }
 }
 
+export function planQuotaBytes(planId: IRSubscriptionPlanId | null | undefined) {
+  if (!planId) return 0
+  const plan = IR_SUBSCRIPTION_PLANS[planId]
+  return plan.storageGb * 1024 * 1024 * 1024
+}
+
 export function describeSyncState(state: IRSyncState) {
   switch (state) {
     case "local_only":

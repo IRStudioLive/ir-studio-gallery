@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getEvent, getEventPhotos, upsertEvent } from "@/lib/irstudiolive/store"
+import { getEvent, getEventPhotos, getEventStorageUsage, upsertEvent } from "@/lib/irstudiolive/store"
 
 export const runtime = "nodejs"
 
@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
     }
 
     const event = getEvent(eventId) ?? upsertEvent({ id: eventId })
+    const storage = getEventStorageUsage(eventId)
 
     const items = getEventPhotos(eventId)
       .slice(0, limit)
@@ -23,11 +24,18 @@ export async function GET(req: NextRequest) {
         fullUrl: photo.fullUrl,
         mediaType: photo.mediaType ?? "image",
         posterUrl: photo.posterUrl ?? null,
+        byteSize: photo.byteSize ?? null,
+        syncState: photo.syncState ?? "synced",
       }))
 
     return NextResponse.json({
       ok: true,
       eventId: event.id,
+      event: {
+        ...event,
+        sellerPlan: event.sellerPlan ?? "free",
+      },
+      storage,
       items,
     })
   } catch (error) {

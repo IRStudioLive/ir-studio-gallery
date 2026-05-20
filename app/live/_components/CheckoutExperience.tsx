@@ -20,6 +20,7 @@ import {
   writeBuyFlowState,
 } from "./live-buy"
 import { LiveEventChrome, formatPhotoTimeLabel, liveThemeClasses, type LiveWebTheme } from "./live-web-theme"
+import { calculatePlatformFee, getSubscriptionPlan, type IRSubscriptionPlanId } from "@/lib/irstudiolive/subscriptions"
 
 type PaymentMethod = "card" | "paypal" | "applepay"
 
@@ -27,6 +28,7 @@ export default function CheckoutExperience({
   theme,
   eventId,
   guestId,
+  sellerPlan,
   eventTitle,
   eventDateLabel,
   backHref,
@@ -35,6 +37,7 @@ export default function CheckoutExperience({
   theme: LiveWebTheme
   eventId: string
   guestId?: string
+  sellerPlan: IRSubscriptionPlanId
   eventTitle: string
   eventDateLabel: string
   backHref: string
@@ -84,6 +87,8 @@ export default function CheckoutExperience({
   const subtotal = digitalTotal + printsTotal
   const tax = subtotal * 0.08
   const grandTotal = subtotal + tax
+  const plan = getSubscriptionPlan(sellerPlan)
+  const platformFee = calculatePlatformFee(Number(grandTotal.toFixed(2)), sellerPlan)
 
   useEffect(() => {
     writeBuyFlowState(eventId, guestId, { collection, selectedIds, printSelections })
@@ -162,6 +167,7 @@ export default function CheckoutExperience({
             .filter((entry) => Number(entry[1]) > 0)
             .map(([sku, quantity]) => ({ sku, quantity })),
           paymentMethod,
+          sellerPlan,
         },
       }),
     })
@@ -321,6 +327,7 @@ export default function CheckoutExperience({
               <div className={`mt-6 border-t pt-5 ${theme === "dark" ? "border-white/10" : "border-black/8"}`}>
                 <PriceLine theme={theme} label="Subtotal" value={subtotal} />
                 <PriceLine theme={theme} label="Tax" value={tax} />
+                {platformFee ? <PriceLine theme={theme} label={`Platform Fee (${platformFee.feePercent}%)`} value={platformFee.amount} subtle /> : null}
                 <div className="mt-3 flex items-end justify-between">
                   <div className={`text-[16px] font-black ${ui.textPrimary}`}>Total</div>
                   <div className="flex items-center gap-2">
@@ -370,6 +377,15 @@ export default function CheckoutExperience({
               <div className={`mt-6 rounded-2xl border px-4 py-4 ${ui.secondaryPanel}`}>
                 <div className={`text-sm font-black ${ui.textPrimary}`}>Satisfaction Guaranteed.</div>
                 <div className={`mt-1 text-sm ${ui.textSecondary}`}>Love your photos or we’ll make it right.</div>
+              </div>
+
+              <div className={`mt-4 rounded-2xl border px-4 py-4 ${ui.secondaryPanel}`}>
+                <div className={`text-sm font-black ${ui.textPrimary}`}>{plan.name} Plan</div>
+                <div className={`mt-1 text-sm ${ui.textSecondary}`}>
+                  {plan.platformFeePercent === 0
+                    ? "No IR Studio Live platform fee is applied on this sale."
+                    : `${plan.platformFeePercent}% IR Studio Live platform fee applies to guest web sales. Payment processor fees are separate.`}
+                </div>
               </div>
             </div>
           </div>
@@ -701,12 +717,12 @@ function SummaryRow({
   )
 }
 
-function PriceLine({ theme, label, value }: { theme: LiveWebTheme; label: string; value: number }) {
+function PriceLine({ theme, label, value, subtle = false }: { theme: LiveWebTheme; label: string; value: number; subtle?: boolean }) {
   const ui = liveThemeClasses(theme)
   return (
     <div className="mt-2 flex items-center justify-between">
       <div className={`text-base ${ui.textSecondary}`}>{label}</div>
-      <div className={`text-[18px] font-semibold ${ui.textPrimary}`}>${value.toFixed(2)}</div>
+      <div className={`${subtle ? "text-base" : "text-[18px]"} font-semibold ${ui.textPrimary}`}>${value.toFixed(2)}</div>
     </div>
   )
 }

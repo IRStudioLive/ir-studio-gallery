@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import fs from "node:fs"
 import path from "node:path"
-import { getPhotos, savePhotos, upsertEvent } from "@/lib/irstudiolive/store"
+import { getEvent, getEventStorageUsage, getPhotos, savePhotos, upsertEvent } from "@/lib/irstudiolive/store"
 import { buildMediaProxyUrl, buildR2MediaKey, putR2Object, r2Enabled } from "@/lib/irstudiolive/r2"
+import type { IRSyncState } from "@/lib/irstudiolive/subscriptions"
 
 export const runtime = "nodejs"
 
@@ -50,6 +51,9 @@ function makeRecord(params: {
   publicBase: string
   kind: "image" | "video"
   mimeType: string | null
+  byteSize: number
+  syncState: IRSyncState
+  cloudStored: boolean
 }) {
   return {
     id: "ph_" + Math.random().toString(36).slice(2, 10),
@@ -61,6 +65,9 @@ function makeRecord(params: {
     posterUrl: params.kind === "video" ? null : params.publicBase,
     mimeType: params.mimeType,
     durationSec: null,
+    byteSize: params.byteSize,
+    syncState: params.syncState,
+    cloudStored: params.cloudStored,
     matchedRecipientIds: [],
     createdAt: new Date().toISOString(),
   }
@@ -102,6 +109,9 @@ function saveIncomingFileLocally(params: {
     publicBase,
     kind: params.kind,
     mimeType: params.mimeType,
+    byteSize: params.bytes.length,
+    syncState: "local_only",
+    cloudStored: false,
   })
   photos.unshift(record)
   savePhotos(photos)
@@ -122,11 +132,41 @@ async function saveIncomingFile(params: {
   const base = sanitizePart(path.basename(originalName, path.extname(originalName))) || `upload_${stamp}`
   const savedName = `${stamp}_${base}${ext}`
 
+  const event = getEvent(params.eventId) ?? upsertEvent({ id: params.eventId })
+  const storage = getEventStorageUsage(params.eventId)
+  const nextUsageBytes = storage.usedBytes + params.bytes.length
+  const quotaBlocked = storage.quotaBytes > 0 && nextUsageBytes > storage.quotaBytes
+
   if (!r2Enabled()) {
-    return saveIncomingFileLocally({
+    const record = saveIncomingFileLocally({
       ...params,
       filename: savedName,
     })
+    return { ok: true as const, record }
+  }
+
+  if (!event.sellerPlan || event.sellerPlan === "free") {
+    return {
+      ok: false as const,
+      status: 402,
+      error: "Cloud sync requires a paid plan",
+      syncState: "local_only" as IRSyncState,
+      storage,
+    }
+  }
+
+  if (quotaBlocked) {
+    return {
+      ok: false as const,
+      status: 507,
+      error: "Cloud storage quota exceeded",
+      syncState: "quota_blocked" as IRSyncState,
+      storage: {
+        ...storage,
+        overQuota: true,
+        remainingBytes: 0,
+      },
+    }
   }
 
   const key = buildR2MediaKey({
@@ -149,10 +189,13 @@ async function saveIncomingFile(params: {
     publicBase,
     kind: params.kind,
     mimeType: params.mimeType,
+    byteSize: params.bytes.length,
+    syncState: "synced",
+    cloudStored: true,
   })
   photos.unshift(record)
   savePhotos(photos)
-  return record
+  return { ok: true as const, record }
 }
 
 export async function POST(req: NextRequest) {
@@ -184,7 +227,7 @@ export async function POST(req: NextRequest) {
 
       upsertEvent({ id: eventId })
 
-      const record = await saveIncomingFile({
+      const saved = await saveIncomingFile({
         eventId,
         kind,
         filename: file.name || `upload_${Date.now()}`,
@@ -192,8 +235,15 @@ export async function POST(req: NextRequest) {
         mimeType: file.type || null,
       })
 
-      console.log("[tether/upload] multipart ok", { eventId, kind, base: record.base })
-      return NextResponse.json({ ok: true, media: record })
+      if (!saved.ok) {
+        return NextResponse.json(
+          { ok: false, error: saved.error, syncState: saved.syncState, storage: saved.storage },
+          { status: saved.status }
+        )
+      }
+
+      console.log("[tether/upload] multipart ok", { eventId, kind, base: saved.record.base })
+      return NextResponse.json({ ok: true, media: saved.record })
     }
 
     // Raw binary body path (image/jpeg, video/quicktime, etc)
@@ -217,7 +267,7 @@ export async function POST(req: NextRequest) {
 
     upsertEvent({ id: eventId })
 
-    const record = await saveIncomingFile({
+    const saved = await saveIncomingFile({
       eventId,
       kind,
       filename: `raw_upload_${Date.now()}${extFromMime(contentType, kind)}`,
@@ -225,15 +275,22 @@ export async function POST(req: NextRequest) {
       mimeType: contentType || null,
     })
 
+    if (!saved.ok) {
+      return NextResponse.json(
+        { ok: false, error: saved.error, syncState: saved.syncState, storage: saved.storage },
+        { status: saved.status }
+      )
+    }
+
     console.log("[tether/upload] raw ok", {
       eventId,
       kind,
       bytes: bytes.length,
-      base: record.base,
+      base: saved.record.base,
       mime: contentType,
     })
 
-    return NextResponse.json({ ok: true, media: record })
+    return NextResponse.json({ ok: true, media: saved.record })
   } catch (error) {
     console.error("[tether/upload] error", error)
     return NextResponse.json({ ok: false, error: String(error) }, { status: 500 })

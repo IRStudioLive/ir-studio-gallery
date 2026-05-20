@@ -1,3 +1,5 @@
+import type { IRSubscriptionPlanId, IRSyncState } from "./subscriptions"
+
 export type LiveRecipient = {
   id: string
   eventId: string
@@ -20,6 +22,9 @@ export type LivePhoto = {
   posterUrl?: string | null
   mimeType?: string | null
   durationSec?: number | null
+  byteSize?: number | null
+  syncState?: IRSyncState
+  cloudStored?: boolean
   matchedRecipientIds?: string[]
   createdAt: string
 }
@@ -29,5 +34,15 @@ export type LiveEvent = {
   title?: string | null
   isPublic: boolean
   requireSelfie: boolean
+  sellerPlan?: IRSubscriptionPlanId | null
   createdAt: string
+}
+
+export type LiveSellerAccount = {
+  id: string
+  email: string
+  displayName: string
+  plan: IRSubscriptionPlanId
+  createdAt: string
+  updatedAt: string
 }

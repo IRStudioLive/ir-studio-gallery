@@ -1,6 +1,7 @@
 import CheckoutExperience from "@/app/live/_components/CheckoutExperience"
 import { displayEventTitle, formatEventDateLabel, resolveLiveWebTheme } from "@/app/live/_components/live-web-theme"
 import { getEvent, getEventPhotos, getGuestPhotos } from "@/lib/irstudiolive/store"
+import type { IRSubscriptionPlanId } from "@/lib/irstudiolive/subscriptions"
 
 export default async function LiveCheckoutPage({
   params,
@@ -37,6 +38,7 @@ export default async function LiveCheckoutPage({
       theme={theme}
       eventId={eventId}
       guestId={guestId}
+      sellerPlan={(event?.sellerPlan ?? "free") as IRSubscriptionPlanId}
       eventTitle={eventTitle}
       eventDateLabel={eventDate}
       backHref={backHref}
