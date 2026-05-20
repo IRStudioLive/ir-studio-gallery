@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import fs from "node:fs"
 import path from "node:path"
+import { calculatePlatformFee, type IRSubscriptionPlanId } from "@/lib/irstudiolive/subscriptions"
 
 type OrderItem = {
   id: string
@@ -27,6 +28,7 @@ type OrderPayload = {
     collection?: string
     prints?: Array<{ sku: string; quantity: number }>
     paymentMethod?: string
+    sellerPlan?: IRSubscriptionPlanId
   }
 }
 
@@ -38,9 +40,17 @@ type StoredOrder = {
   items: OrderItem[]
   total: number
   extras?: OrderPayload["extras"]
+  commerce?: {
+    sellerPlan: IRSubscriptionPlanId | null
+    platformFeePercent: number | null
+    platformFeeAmount: number | null
+    fulfillmentMode: "digital-download" | "self-fulfilled-print-order" | "mixed"
+  }
   status: "requested"
   createdAt: string
 }
+
+type FulfillmentMode = NonNullable<StoredOrder["commerce"]>["fulfillmentMode"]
 
 const ROOT = path.join(process.cwd(), "data", "irstudiolive")
 const FILE = path.join(ROOT, "orders.json")
@@ -73,6 +83,12 @@ export async function POST(req: NextRequest) {
 
     const db = readDb()
     const orderId = "ord_" + Math.random().toString(36).slice(2, 10)
+    const sellerPlan = body.extras?.sellerPlan ?? null
+    const platformFee = calculatePlatformFee(body.total ?? 0, sellerPlan)
+    const hasPrints = Boolean(body.extras?.prints?.length)
+    const hasDigitalItems = body.items.some((item) => item.product === "digital")
+    const fulfillmentMode: FulfillmentMode =
+      hasPrints && hasDigitalItems ? "mixed" : hasPrints ? "self-fulfilled-print-order" : "digital-download"
 
     db.orders.unshift({
       id: orderId,
@@ -82,6 +98,12 @@ export async function POST(req: NextRequest) {
       items: body.items,
       total: body.total ?? 0,
       extras: body.extras ?? undefined,
+      commerce: {
+        sellerPlan,
+        platformFeePercent: platformFee?.feePercent ?? null,
+        platformFeeAmount: platformFee?.amount ?? null,
+        fulfillmentMode,
+      },
       status: "requested",
       createdAt: new Date().toISOString(),
     })
