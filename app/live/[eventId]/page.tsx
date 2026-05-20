@@ -1,7 +1,7 @@
 import LiveAutoRefresh from "../_components/LiveAutoRefresh"
 import PublicLiveWallClient from "../_components/PublicLiveWallClient"
 import { absoluteLiveUrl, displayEventTitle, formatEventDateLabel, LiveEventChrome, resolveLiveWebTheme } from "../_components/live-web-theme"
-import { getEvent, getEventPhotos, getRecipientsForEvent, upsertEvent } from "@/lib/irstudiolive/store"
+import { getEvent, getEventPhotos, getRecipientsForEvent } from "@/lib/irstudiolive/store"
 
 export default async function LiveEventPage({
   params,
@@ -14,7 +14,6 @@ export default async function LiveEventPage({
   const { theme: themeInput } = await searchParams
   const theme = resolveLiveWebTheme(themeInput)
 
-  upsertEvent({ id: eventId })
   const event = getEvent(eventId)
   const recipients = getRecipientsForEvent(eventId)
   const photos = getEventPhotos(eventId).map((photo) => ({
@@ -27,6 +26,20 @@ export default async function LiveEventPage({
     createdAt: photo.createdAt,
     durationSec: photo.durationSec ?? null,
   }))
+
+  if (!event) {
+    return (
+      <LiveEventChrome
+        theme={theme}
+        eventTitle="IR Studio Live Event"
+        eventDate="Event unavailable"
+      >
+        <div className="rounded-[28px] border border-black/10 bg-white p-10 text-center text-lg text-black/65">
+          This event could not be found.
+        </div>
+      </LiveEventChrome>
+    )
+  }
 
   if (!event?.isPublic) {
     return (
