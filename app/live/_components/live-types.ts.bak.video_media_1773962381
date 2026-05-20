@@ -1,0 +1,14 @@
+export type LivePhotoCard = {
+  id: string
+  base: string
+  previewUrl: string
+  fullUrl: string
+}
+
+export type CartLine = {
+  id: string
+  base: string
+  previewUrl: string
+  fullUrl: string
+  product: "digital" | "print4x6" | "print5x7" | "print8x10"
+}

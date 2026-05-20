@@ -1,0 +1,152 @@
+"use client"
+
+import Link from "next/link"
+import { useEffect, useMemo, useState } from "react"
+import LiveShell from "@/app/live/_components/LiveShell"
+import {
+  PRODUCT_LABELS,
+  PRODUCT_PRICES,
+  cartTotal,
+  readCart,
+  removeCartItem,
+  setCartProduct,
+} from "@/app/live/_components/live-cart"
+import type { CartLine } from "@/app/live/_components/live-types"
+
+export default function LiveCheckoutPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ eventId: string }>
+  searchParams: Promise<{ guestId?: string }>
+}) {
+  const [eventId, setEventId] = useState("")
+  const [guestId, setGuestId] = useState<string | undefined>(undefined)
+  const [cart, setCart] = useState<CartLine[]>([])
+  const [name, setName] = useState("")
+  const [phone, setPhone] = useState("")
+  const [email, setEmail] = useState("")
+  const [notes, setNotes] = useState("")
+  const [status, setStatus] = useState("")
+
+  useEffect(() => {
+    Promise.all([params, searchParams]).then(([p, s]) => {
+      setEventId(p.eventId)
+      setGuestId(s.guestId)
+      setCart(readCart(p.eventId, s.guestId))
+    })
+  }, [params, searchParams])
+
+  const total = useMemo(() => cartTotal(cart), [cart])
+
+  async function submit() {
+    if (!eventId || !cart.length) return
+    setStatus("Submitting checkout request…")
+    const res = await fetch("/api/tether/orders/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        eventId,
+        guestId: guestId || null,
+        customer: { name, phone, email, notes },
+        items: cart,
+        total,
+      }),
+    })
+    const json = await res.json()
+    if (!res.ok || !json?.ok) {
+      setStatus("Checkout request failed.")
+      return
+    }
+    setStatus(`Order request submitted. Order ID: ${json.orderId}`)
+  }
+
+  return (
+    <LiveShell
+      title="Checkout"
+      subtitle="Review your selected images and submit your order request."
+      eventId={eventId}
+      rightSlot={
+        <Link
+          href={guestId ? `/live/${encodeURIComponent(eventId)}/guest/${encodeURIComponent(guestId)}` : `/live/${encodeURIComponent(eventId)}`}
+          className="rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm font-black"
+        >
+          Back to Gallery
+        </Link>
+      }
+    >
+      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="space-y-4">
+          <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5">
+            <div className="text-lg font-black">Selected Photos</div>
+            <div className="mt-4 space-y-4">
+              {cart.length ? cart.map((item) => (
+                <div key={item.id} className="flex flex-col gap-4 rounded-[22px] border border-white/10 bg-black/30 p-4 sm:flex-row">
+                  <img src={item.previewUrl} alt={item.base} className="h-32 w-full rounded-2xl object-contain bg-black sm:w-32" />
+                  <div className="flex-1">
+                    <div className="text-sm font-bold">{item.base}</div>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <select
+                        value={item.product}
+                        onChange={(e) => setCart(setCartProduct(eventId, guestId, item.id, e.target.value as CartLine["product"]))}
+                        className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white"
+                      >
+                        {Object.entries(PRODUCT_LABELS).map(([key, label]) => (
+                          <option key={key} value={key}>
+                            {label} - ${PRODUCT_PRICES[key as keyof typeof PRODUCT_PRICES].toFixed(2)}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => setCart(removeCartItem(eventId, guestId, item.id))}
+                        className="rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm font-bold"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-right text-sm font-black">
+                    ${PRODUCT_PRICES[item.product].toFixed(2)}
+                  </div>
+                </div>
+              )) : (
+                <div className="text-sm text-white/55">No photos selected yet.</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5">
+            <div className="text-lg font-black">Order Details</div>
+            <div className="mt-4 grid gap-3">
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-white placeholder:text-white/35" />
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-white placeholder:text-white/35" />
+              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-white placeholder:text-white/35" />
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" rows={4} className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-white placeholder:text-white/35" />
+            </div>
+          </div>
+
+          <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-white/60">Items</div>
+              <div className="font-bold">{cart.length}</div>
+            </div>
+            <div className="mt-3 flex items-center justify-between">
+              <div className="text-sm text-white/60">Estimated total</div>
+              <div className="text-2xl font-black">${total.toFixed(2)}</div>
+            </div>
+            <button
+              onClick={submit}
+              disabled={!cart.length}
+              className="mt-5 w-full rounded-2xl bg-white px-5 py-4 text-sm font-black text-black disabled:opacity-50"
+            >
+              Submit Checkout Request
+            </button>
+            {status ? <div className="mt-3 text-sm text-white/70">{status}</div> : null}
+          </div>
+        </div>
+      </div>
+    </LiveShell>
+  )
+}

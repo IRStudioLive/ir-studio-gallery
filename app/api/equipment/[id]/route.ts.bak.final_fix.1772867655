@@ -1,0 +1,56 @@
+import { NextRequest, NextResponse } from "next/server"
+import { deleteEquipmentItem, getEquipmentItems, updateEquipmentItem } from "@/lib/equipment-store"
+
+type RouteCtx = {
+  params: Promise<{ id: string }>
+}
+
+export async function PUT(req: NextRequest, ctx: RouteCtx) {
+  try {
+    const { id } = await ctx.params
+    const body = await req.json()
+    const item = await updateEquipmentItem(id, body)
+    if (!item) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+    return NextResponse.json({ ok: true, item })
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Update failed" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(_req: NextRequest, ctx: RouteCtx) {
+  try {
+    const { id } = await ctx.params
+    const ok = await deleteEquipmentItem(id)
+    if (!ok) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Delete failed" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function GET(_req: NextRequest, ctx: RouteCtx) {
+  try {
+    const { id } = await ctx.params
+    const items = await getEquipmentItems()
+    const item = items.find((x: any) => x.id === id)
+    if (!item) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+    return NextResponse.json({ ok: true, item })
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Load failed" },
+      { status: 500 }
+    )
+  }
+}

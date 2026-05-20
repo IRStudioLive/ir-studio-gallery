@@ -1,0 +1,71 @@
+import Link from "next/link"
+import LiveShell from "../_components/LiveShell"
+import PolishedPhotoGrid from "../_components/PolishedPhotoGrid"
+import { getEvent, getEventPhotos, seedDemoPhoto, upsertEvent } from "@/lib/irstudiolive/store"
+
+export default async function LiveEventPage({
+  params,
+}: {
+  params: Promise<{ eventId: string }>
+}) {
+  const { eventId } = await params
+  upsertEvent({ id: eventId })
+  seedDemoPhoto(eventId)
+  const event = getEvent(eventId)
+  const photos = getEventPhotos(eventId).map((photo) => ({
+    id: photo.id,
+    base: photo.base,
+    previewUrl: photo.previewUrl,
+    fullUrl: photo.fullUrl,
+  }))
+
+  if (!event?.isPublic) {
+    return (
+      <LiveShell
+        title="Private Event"
+        subtitle="This event is not publicly visible."
+        eventId={eventId}
+      >
+        <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-8 text-white/65">
+          This event has public access turned off.
+        </div>
+      </LiveShell>
+    )
+  }
+
+  return (
+    <LiveShell
+      title="Live Event Gallery"
+      subtitle="A polished web view of the IR Studio Live wall."
+      eventId={eventId}
+      rightSlot={
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href={`/live/join?eventId=${encodeURIComponent(eventId)}`}
+            className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-black"
+          >
+            Join Event
+          </Link>
+        </div>
+      }
+    >
+      <div className="mb-6 grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+        <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5">
+          <div className="text-lg font-black">IR Studio Live</div>
+          <div className="mt-2 max-w-2xl text-sm text-white/60">
+            Guests can join the event, view their matched photos, select favorites, and continue to checkout.
+          </div>
+        </div>
+
+        <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5">
+          <div className="text-sm font-bold text-white/80">Guest Join Link</div>
+          <div className="mt-2 break-all text-xs text-white/55">
+            /live/join?eventId={eventId}
+          </div>
+        </div>
+      </div>
+
+      <PolishedPhotoGrid eventId={eventId} photos={photos} selectable={false} />
+    </LiveShell>
+  )
+}

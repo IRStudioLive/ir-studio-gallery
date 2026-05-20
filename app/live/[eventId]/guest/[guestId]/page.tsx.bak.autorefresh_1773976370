@@ -1,0 +1,55 @@
+import Link from "next/link"
+import LiveShell from "@/app/live/_components/LiveShell"
+import PolishedPhotoGrid from "@/app/live/_components/PolishedPhotoGrid"
+import { getGuestPhotos, getRecipient } from "@/lib/irstudiolive/store"
+
+export default async function LiveGuestPage({
+  params,
+}: {
+  params: Promise<{ eventId: string; guestId: string }>
+}) {
+  const { eventId, guestId } = await params
+  const guest = getRecipient(eventId, guestId)
+  const photos = getGuestPhotos(eventId, guestId).map((photo) => ({
+    id: photo.id,
+    base: photo.base,
+    previewUrl: photo.posterUrl || photo.previewUrl,
+    fullUrl: photo.fullUrl,
+    mediaType: photo.mediaType,
+    posterUrl: photo.posterUrl,
+  }))
+
+  return (
+    <LiveShell
+      title="Your Live Gallery"
+      subtitle={guest?.name || guest?.email || guest?.phone || "Guest"}
+      eventId={eventId}
+      rightSlot={
+        <Link
+          href={`/live/${encodeURIComponent(eventId)}/checkout?guestId=${encodeURIComponent(guestId)}`}
+          className="rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm font-black"
+        >
+          View Cart
+        </Link>
+      }
+    >
+      <div className="mb-6 rounded-[24px] border border-white/10 bg-white/[0.04] p-5">
+        <div className="text-lg font-black">Matched Media</div>
+        <div className="mt-2 text-sm text-white/60">
+          Select your favorite photos or videos below, then continue to checkout.
+        </div>
+      </div>
+
+      {photos.length ? (
+        <PolishedPhotoGrid eventId={eventId} guestId={guestId} photos={photos} selectable />
+      ) : (
+        <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-10 text-center">
+          <div className="text-xl font-black">No matched media yet</div>
+          <div className="mt-2 text-sm text-white/55">
+            As new photos and videos are matched to you, they will appear here automatically.
+          </div>
+        </div>
+      )}
+    </LiveShell>
+  )
+}

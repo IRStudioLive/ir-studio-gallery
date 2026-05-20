@@ -1,0 +1,29 @@
+export type LiveRecipient = {
+  id: string
+  eventId: string
+  code: string
+  name?: string | null
+  phone?: string | null
+  email?: string | null
+  selfieUrl?: string | null
+  faceEmbedding?: number[] | null
+  createdAt: string
+}
+
+export type LivePhoto = {
+  id: string
+  eventId: string
+  base: string
+  previewUrl: string
+  fullUrl: string
+  matchedRecipientIds?: string[]
+  createdAt: string
+}
+
+export type LiveEvent = {
+  id: string
+  title?: string | null
+  isPublic: boolean
+  requireSelfie: boolean
+  createdAt: string
+}

@@ -1,0 +1,27 @@
+{
+  "orders": [
+    {
+      "id": "ord_dltqguo7",
+      "eventId": "evt_73165CB16FFB",
+      "guestId": "gst_h0fbcui9",
+      "customer": {
+        "name": "Runtime Test",
+        "email": "runtime@example.com"
+      },
+      "items": [
+        {
+          "id": "ph_r7pjj7cr",
+          "base": "raw_upload_1779072410806",
+          "previewUrl": "/irstudiolive/evt_73165CB16FFB/videos/1779072410806_afipwg_raw_upload_1779072410806.mp4",
+          "fullUrl": "/irstudiolive/evt_73165CB16FFB/videos/1779072410806_afipwg_raw_upload_1779072410806.mp4",
+          "product": "digital",
+          "mediaType": "video",
+          "posterUrl": null
+        }
+      ],
+      "total": 15,
+      "status": "requested",
+      "createdAt": "2026-05-18T02:53:36.948Z"
+    }
+  ]
+}

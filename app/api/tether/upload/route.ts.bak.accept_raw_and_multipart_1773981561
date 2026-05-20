@@ -1,0 +1,90 @@
+import { NextRequest, NextResponse } from "next/server"
+import fs from "node:fs"
+import path from "node:path"
+import { getPhotos, savePhotos, upsertEvent } from "@/lib/irstudiolive/store"
+
+export const runtime = "nodejs"
+
+function sanitizePart(value: string) {
+  const cleaned = value.replace(/[^A-Za-z0-9._-]+/g, "_")
+  return cleaned || "file"
+}
+
+function extFromName(name: string) {
+  const ext = path.extname(name || "").toLowerCase()
+  return ext || ""
+}
+
+function mediaKind(mime: string, filename: string): "image" | "video" | null {
+  const m = (mime || "").toLowerCase()
+  const ext = extFromName(filename)
+  if (m.startsWith("image/")) return "image"
+  if (m.startsWith("video/")) return "video"
+  if ([".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif"].includes(ext)) return "image"
+  if ([".mp4", ".mov", ".m4v", ".webm"].includes(ext)) return "video"
+  return null
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const form = await req.formData()
+    const eventId =
+      String(form.get("eventId") ?? req.headers.get("x-event-id") ?? "").trim()
+
+    if (!eventId) {
+      return NextResponse.json({ ok: false, error: "Missing eventId" }, { status: 400 })
+    }
+
+    const file = form.get("file")
+    if (!(file instanceof File)) {
+      return NextResponse.json({ ok: false, error: "Missing file" }, { status: 400 })
+    }
+
+    const kind = mediaKind(file.type || "", file.name || "")
+    if (!kind) {
+      return NextResponse.json({ ok: false, error: "Unsupported file type" }, { status: 415 })
+    }
+
+    upsertEvent({ id: eventId })
+
+    const root = path.join(process.cwd(), "public", "irstudiolive", sanitizePart(eventId), kind === "video" ? "videos" : "images")
+    fs.mkdirSync(root, { recursive: true })
+
+    const originalName = sanitizePart(file.name || `upload_${Date.now()}`)
+    const ext = extFromName(originalName) || (kind === "video" ? ".mp4" : ".jpg")
+    const stamp = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const base = sanitizePart(path.basename(originalName, path.extname(originalName))) || `upload_${stamp}`
+    const savedName = `${stamp}_${base}${ext}`
+    const savedPath = path.join(root, savedName)
+
+    const bytes = Buffer.from(await file.arrayBuffer())
+    fs.writeFileSync(savedPath, bytes)
+
+    const publicBase = `/irstudiolive/${encodeURIComponent(sanitizePart(eventId))}/${kind === "video" ? "videos" : "images"}/${encodeURIComponent(savedName)}`
+    const photos = getPhotos()
+
+    const record = {
+      id: "ph_" + Math.random().toString(36).slice(2, 10),
+      eventId,
+      base,
+      previewUrl: publicBase,
+      fullUrl: publicBase,
+      mediaType: kind,
+      posterUrl: kind === "video" ? null : publicBase,
+      mimeType: file.type || null,
+      durationSec: null,
+      matchedRecipientIds: [],
+      createdAt: new Date().toISOString(),
+    }
+
+    photos.unshift(record)
+    savePhotos(photos)
+
+    return NextResponse.json({
+      ok: true,
+      media: record,
+    })
+  } catch (error) {
+    return NextResponse.json({ ok: false, error: String(error) }, { status: 500 })
+  }
+}
